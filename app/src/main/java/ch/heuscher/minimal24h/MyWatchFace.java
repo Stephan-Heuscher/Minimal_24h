@@ -171,7 +171,7 @@ public class MyWatchFace extends CanvasWatchFaceService {
             drawCircle(hoursRotation, 0, canvas, mCenterX/75, mHandPaint);
             // DND + no Connection + "Message" + Wifi + Power anzeigen
             // ev. anzeigen, wenn aktiv
-            String specials = getSpecials(batteryManager, canvas);
+            String specials = getSpecials(canvas);
             // schwarz füllen, wenn etwas symbolisiert werden soll
             if (specials != null && specials.length()>0) {
                 drawCircle(hoursRotation, 0, canvas, mCenterX/75 - 1, mBackgroundPaint);
@@ -191,7 +191,7 @@ public class MyWatchFace extends CanvasWatchFaceService {
             }
         }
 
-        private String getSpecials(BatteryManager batteryManager, Canvas canvas) {
+        private String getSpecials(Canvas canvas) {
             String specials = "";
             try {
                 WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
