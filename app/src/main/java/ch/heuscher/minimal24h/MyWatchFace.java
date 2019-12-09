@@ -194,30 +194,27 @@ public class MyWatchFace extends CanvasWatchFaceService {
         private String getSpecials(BatteryManager batteryManager, Canvas canvas) {
             String specials = "";
             try {
-                if (batteryManager.getIntProperty(BatteryManager.BATTERY_STATUS_CHARGING) > 0  ) {
-                    specials += "↯";
-                }
                 WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
                 if (wifiManager != null && wifiManager.isWifiEnabled()) {
                     specials += "W";
                 }
                 if (getUnreadCount() > 0) { // entweder ungelesene
-                    specials += "⚠";
+                    specials += "!";
                 }
                 else if (getNotificationCount() > 0) { // oder noch andere
-                    specials += "¿";
+                    specials += "i";
                 }
-                if (getInterruptionFilter() == INTERRUPTION_FILTER_PRIORITY) {
-                    specials += "Ø";
+                if (getInterruptionFilter() != INTERRUPTION_FILTER_PRIORITY) {
+                    specials += "<";
                 }
                 if (Settings.Global.getInt(getContentResolver(), Settings.Global.AIRPLANE_MODE_ON) == 1) {
-                    specials += "✈";
+                    specials += ">";
                 }
                 else {
                     ConnectivityManager connectivityManager =(ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
                     Network activeNetwork = connectivityManager.getActiveNetwork();
                     if (activeNetwork == null) {
-                        specials += "#";
+                        specials += "X";
                     }
                 }
                 LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
