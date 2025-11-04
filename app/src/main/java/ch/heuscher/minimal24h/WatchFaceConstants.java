@@ -104,4 +104,9 @@ public final class WatchFaceConstants {
 
     /** Symbol for hour marker (midnight/north indicator) */
     public static final String SYMBOL_HOUR_MARKER = "l";
+
+    // === Interruption Filter Constants ===
+
+    /** Interruption filter value for priority mode (from NotificationListenerService) */
+    public static final int INTERRUPTION_FILTER_PRIORITY = 2;
 }
