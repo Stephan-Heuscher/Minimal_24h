@@ -31,36 +31,21 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
-import android.os.PowerManager;
-import android.provider.CalendarContract;
 import android.provider.Settings;
-import android.support.wearable.complications.ComplicationData;
-import android.support.wearable.complications.SystemProviders;
-import android.support.wearable.provider.WearableCalendarContract;
-import android.support.wearable.watchface.CanvasWatchFaceService;
-import android.support.wearable.watchface.WatchFaceService;
-import android.support.wearable.watchface.WatchFaceStyle;
-import android.util.Log;
+import androidx.wear.watchface.CanvasWatchFaceService;
+import androidx.wear.watchface.WatchFaceStyle;
 import android.view.SurfaceHolder;
 
-import java.text.SimpleDateFormat;
-import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+
+import static ch.heuscher.minimal24h.WatchFaceConstants.*;
 
 /**
  * Analog 24h watch face. On devices with low-bit ambient mode, the hands are drawn without anti-aliasing in ambient mode.
  */
 public class MyWatchFace extends CanvasWatchFaceService {
-
-    private static final float TEXT_SIZE = 15;
-    private static final float RAND_RESERVE = 7.5f;
 
     @Override
     public Engine onCreateEngine() {
@@ -78,7 +63,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
         };
 
         private boolean mRegisteredReceivers = false;
-        private static final float STROKE_WIDTH = 2f;
         private Calendar mCalendar;
         private Paint mBackgroundPaint;
         private Paint mHandPaint;
@@ -91,11 +75,18 @@ public class MyWatchFace extends CanvasWatchFaceService {
         private float mCenterX;
         private float mCenterY;
 
+        // Cached system services for performance
+        private BatteryManager mBatteryManager;
+        private AlarmManager mAlarmManager;
+        private WifiManager mWifiManager;
+        private ConnectivityManager mConnectivityManager;
+        private LocationManager mLocationManager;
+
         @Override
         public void onCreate(SurfaceHolder holder) {
             super.onCreate(holder);
             setWatchFaceStyle(new WatchFaceStyle.Builder(MyWatchFace.this).
-                    setShowUnreadCountIndicator(true). // so dass Unread-Punkt nicht mehr sichtbar
+                    setShowUnreadCountIndicator(true).
                     setHideStatusBar(true).build());
 
             mBackgroundPaint = new Paint();
@@ -109,6 +100,13 @@ public class MyWatchFace extends CanvasWatchFaceService {
             mHandPaint.setTextSize(TEXT_SIZE);
             mHandPaint.setTypeface(mNormal);
             mCalendar = Calendar.getInstance();
+
+            // Cache system services for performance (avoid repeated getSystemService calls)
+            mBatteryManager = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
+            mAlarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            mWifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+            mConnectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         }
 
         @Override
@@ -139,7 +137,7 @@ public class MyWatchFace extends CanvasWatchFaceService {
             /*
              * Calculate the lengths of the watch hands and store them in member variables.
              */
-            mHourHandLength = mCenterX - RAND_RESERVE;
+            mHourHandLength = mCenterX - EDGE_RESERVE;
         }
 
         @Override
@@ -151,42 +149,38 @@ public class MyWatchFace extends CanvasWatchFaceService {
 
             final float hoursRotation = getDegreesFromNorth(mCalendar);
 
-            int batteryCharge = 100;
-            BatteryManager batteryManager = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
-            if (batteryManager != null) {
-                batteryCharge = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            int batteryCharge = DEFAULT_BATTERY_LEVEL;
+            if (mBatteryManager != null) {
+                batteryCharge = mBatteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             }
             mHandPaint.setColor(Color.WHITE);
-            // Farbe rot wenn wenig Batterie
-            if (batteryCharge <= 10) {
+            // Color red when battery is low
+            if (batteryCharge <= LOW_BATTERY_THRESHOLD) {
                 mHandPaint.setColor(Color.RED);
             }
 
-            // Minuten-"Zeiger"
-            drawCircle(hoursRotation, mHourHandLength, canvas, mCenterX/75, mHandPaint);
-            // 24h Orientierung
-            drawTextUprightFromCenter(0, mHourHandLength - TEXT_SIZE/2, "l", mHandPaint, canvas, null);
+            // Hour hand indicator (minute position marker)
+            drawCircle(hoursRotation, mHourHandLength, canvas, mCenterX / CIRCLE_RADIUS_DIVISOR, mHandPaint);
+            // 24h orientation marker (midnight/north indicator)
+            drawTextUprightFromCenter(0, mHourHandLength - TEXT_SIZE / TEXT_OFFSET_DIVISOR, SYMBOL_HOUR_MARKER, mHandPaint, canvas, null);
 
-            // Mitte-Orientierung
-            drawCircle(hoursRotation, 0, canvas, mCenterX/75, mHandPaint);
-            // DND + no Connection + "Message" + Wifi + Power anzeigen
-            // ev. anzeigen, wenn aktiv
+            // Center orientation circle
+            drawCircle(hoursRotation, 0, canvas, mCenterX / CIRCLE_RADIUS_DIVISOR, mHandPaint);
+            // Display status indicators: DND, no connection, notifications, WiFi, GPS
             String specials = getSpecials(canvas);
-            // schwarz füllen, wenn etwas symbolisiert werden soll
-            if (specials != null && specials.length()>0) {
-                drawCircle(hoursRotation, 0, canvas, mCenterX/75 - 1, mBackgroundPaint);
+            // Fill center with black when status indicators are active
+            if (specials != null && specials.length() > 0) {
+                drawCircle(hoursRotation, 0, canvas, mCenterX / CIRCLE_RADIUS_DIVISOR - CENTER_CIRCLE_FILL_ADJUSTMENT, mBackgroundPaint);
             }
 
             float alarmDistanceFromCenter = mHourHandLength;
             Calendar time = Calendar.getInstance();
-            AlarmManager alarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-            if (alarm != null) {
-                AlarmManager.AlarmClockInfo nextAlarmClock = alarm.getNextAlarmClock();
-                if (nextAlarmClock != null && nextAlarmClock.getTriggerTime() - TimeUnit.HOURS.toMillis(18) < mCalendar.getTimeInMillis()) {
+            if (mAlarmManager != null) {
+                AlarmManager.AlarmClockInfo nextAlarmClock = mAlarmManager.getNextAlarmClock();
+                if (nextAlarmClock != null && nextAlarmClock.getTriggerTime() - TimeUnit.HOURS.toMillis(ALARM_DISPLAY_THRESHOLD_HOURS) < mCalendar.getTimeInMillis()) {
                     time.setTimeInMillis(nextAlarmClock.getTriggerTime());
-                    String alarmText = "A";//String.format("%tR", time.getTime());
                     drawTextUprightFromCenter(getDegreesFromNorth(time),
-                            alarmDistanceFromCenter, alarmText, mHandPaint, canvas, null);
+                            alarmDistanceFromCenter, SYMBOL_ALARM, mHandPaint, canvas, null);
                 }
             }
         }
@@ -194,36 +188,37 @@ public class MyWatchFace extends CanvasWatchFaceService {
         private String getSpecials(Canvas canvas) {
             String specials = "";
             try {
-                WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
-                if (wifiManager != null && wifiManager.isWifiEnabled()) {
-                    specials += "W";
+                if (mWifiManager != null && mWifiManager.isWifiEnabled()) {
+                    specials += SYMBOL_WIFI;
                 }
-                if (getUnreadCount() > 0) { // entweder ungelesene
-                    specials += "!";
+                if (getUnreadCount() > 0) {
+                    specials += SYMBOL_UNREAD;
                 }
-                else if (getNotificationCount() > 0) { // oder noch andere
-                    specials += "i";
+                else if (getNotificationCount() > 0) {
+                    specials += SYMBOL_NOTIFICATION;
                 }
                 if (getInterruptionFilter() != INTERRUPTION_FILTER_PRIORITY) {
-                    specials += "<";
+                    specials += SYMBOL_DND;
                 }
                 if (Settings.Global.getInt(getContentResolver(), Settings.Global.AIRPLANE_MODE_ON) == 1) {
-                    specials += ">";
+                    specials += SYMBOL_AIRPLANE;
                 }
                 else {
-                    ConnectivityManager connectivityManager =(ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-                    Network activeNetwork = connectivityManager.getActiveNetwork();
-                    if (activeNetwork == null) {
-                        specials += "X";
+                    if (mConnectivityManager != null) {
+                        Network activeNetwork = mConnectivityManager.getActiveNetwork();
+                        if (activeNetwork == null) {
+                            specials += SYMBOL_NO_CONNECTION;
+                        }
                     }
                 }
-                LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                if (locationManager != null && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    specials += "⌖";
+                if (mLocationManager != null && mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    specials += SYMBOL_GPS;
                 }
             }
-            catch (Throwable t) {
-                drawTextUprightFromCenter(0,0, t.getMessage(), mHandPaint, canvas, null);
+            catch (SecurityException | Settings.SettingNotFoundException e) {
+                // Display error message on watch face for debugging
+                String errorMsg = e.getClass().getSimpleName();
+                drawTextUprightFromCenter(0, 0, errorMsg, mHandPaint, canvas, null);
             }
             return specials;
         }
@@ -240,12 +235,12 @@ public class MyWatchFace extends CanvasWatchFaceService {
         {
             float textLengthX = paint.measureText(text);
             float textLengthY = paint.getTextSize();
-            //                          center text
-            float x = mCenterX - textLengthX/2 + radiusCenter *
-                    (float) Math.cos(Math.toRadians(degreesFromNorth - 90f));
-            float y = mCenterY + textLengthY/24*7 +
+            // Center text horizontally and vertically around the calculated position
+            float x = mCenterX - textLengthX / 2 + radiusCenter *
+                    (float) Math.cos(Math.toRadians(degreesFromNorth - ROTATION_OFFSET_DEGREES));
+            float y = mCenterY + textLengthY * TEXT_VERTICAL_CENTER_RATIO +
                     radiusCenter *
-                            (float) Math.sin(Math.toRadians(degreesFromNorth - 90f));
+                            (float) Math.sin(Math.toRadians(degreesFromNorth - ROTATION_OFFSET_DEGREES));
             if (typeface != null) {
                 Typeface prevTypeface = paint.getTypeface();
                 paint.setTypeface(typeface);
@@ -290,6 +285,6 @@ public class MyWatchFace extends CanvasWatchFaceService {
     }
 
     private float getDegreesFromNorth(Calendar time) {
-        return time.get(Calendar.HOUR_OF_DAY)*15f + time.get(Calendar.MINUTE)/4f;
+        return time.get(Calendar.HOUR_OF_DAY) * DEGREES_PER_HOUR + time.get(Calendar.MINUTE) / MINUTES_TO_DEGREES_DIVISOR;
     }
 }
