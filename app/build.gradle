@@ -1,10 +1,11 @@
 apply plugin: 'com.android.application'
 
 android {
+    namespace 'ch.heuscher.minimal24h'
     compileSdkVersion 34
     defaultConfig {
         applicationId "ch.heuscher.minimal24h"
-        minSdkVersion 25
+        minSdkVersion 26
         targetSdkVersion 34
         versionCode 1
         versionName "1.0"

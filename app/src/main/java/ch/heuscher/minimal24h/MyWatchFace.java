@@ -32,8 +32,8 @@ import android.net.Network;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.provider.Settings;
-import androidx.wear.watchface.CanvasWatchFaceService;
-import androidx.wear.watchface.WatchFaceStyle;
+import android.support.wearable.watchface.CanvasWatchFaceService;
+import android.support.wearable.watchface.WatchFaceStyle;
 import android.view.SurfaceHolder;
 
 import java.util.Calendar;
